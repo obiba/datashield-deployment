@@ -1,0 +1,104 @@
+services:
+        reverse-proxy:
+                image: traefik:v2.10
+                container_name: traefik
+                restart: always
+                ports:
+                        - "80:80"       # HTTP
+                        - "443:443"     # HTTPS
+                        - "8080:8080"   # Traefik dashboard
+                command:
+                        - "--api.dashboard=true"                          # Enable the Traefik dashboard
+                        - "--log.level=DEBUG"                             # Set the log level
+                        - "--entrypoints.web.address=:80"                 # HTTP entrypoint
+                        - "--entrypoints.websecure.address=:443"          # HTTPS entrypoint
+                        - "--entrypoints.websecure.http.tls=true"         # Enable TLS on HTTPS
+                        - "--providers.docker=true"                       # Enable Docker as a provider
+                        - "--providers.docker.exposedbydefault=false"     # Only expose services with explicit labels
+                        - "--providers.file.filename=/dynamic.yml"        # Use dynamic configuration file for TLS
+                volumes:
+                        - "/var/run/docker.sock:/var/run/docker.sock:ro"  # Docker socket to listen for container events
+                        - "./certs:/certs"                                # Mount the folder with SSL certificates
+                        - "./dynamic.yml:/dynamic.yml"                    # Mount the dynamic config file
+                labels:
+                        - "traefik.enable=true"                           # Enable Traefik for this container
+                        - "traefik.http.routers.traefik.rule=Host(`traefik.localhost`)"
+                        - "traefik.http.routers.traefik.entrypoints=websecure"
+                        - "traefik.http.routers.traefik.service=api@internal"
+                        - "traefik.http.routers.traefik.tls=true"
+                        # Middleware to redirect HTTP to HTTPS
+                        - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+                        # Apply middleware to the web entrypoint (HTTP)
+                        - "traefik.http.routers.http-catchall.entrypoints=web"
+                        - "traefik.http.routers.http-catchall.rule=HostRegexp(`{host:.+}`)"
+                        - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
+
+        opal:
+                image: obiba/opal:5.0.0-RC4
+                container_name: opal
+                expose:
+                        - 8080
+                links:
+                        - mongo
+                        - mysqldata
+                        - mariadbdata
+                        - postgresdata
+                        - rock
+                environment:
+                        - OPAL_ADMINISTRATOR_PASSWORD=password
+                        - MONGO_HOST=mongo
+                        - MONGO_PORT=27017
+                        - MONGO_USER=root
+                        - MONGO_PASSWORD=example
+                        - MYSQLDATA_DATABASE=opal
+                        - MYSQLDATA_HOST=mysqldata
+                        - MYSQLDATA_USER=opal
+                        - MYSQLDATA_PASSWORD=password
+                        - MARIADBDATA_DATABASE=opal
+                        - MARIADBDATA_HOST=mariadbdata
+                        - MARIADBDATA_USER=opal
+                        - MARIADBDATA_PASSWORD=password
+                        - POSTGRESDATA_DATABASE=opal
+                        - POSTGRESDATA_HOST=postgresdata
+                        - POSTGRESDATA_USER=opal
+                        - POSTGRESDATA_PASSWORD=password
+                        - ROCK_HOSTS=rock:8085
+                labels:
+                        - "traefik.enable=true"                                    # Enable Traefik for this container
+                        - "traefik.http.routers.opal.rule=Host(`opal.localhost`)"  # Route traffic for this domain
+                        - "traefik.http.routers.opal.entrypoints=websecure"
+                        - "traefik.http.routers.opal.tls=true"
+                volumes:
+                        - ./target/test-opal:/srv
+        mongo:
+                image: mongo:6.0
+                container_name: mongo
+                environment:
+                        - MONGO_INITDB_ROOT_USERNAME=root
+                        - MONGO_INITDB_ROOT_PASSWORD=example
+        mysqldata:
+                image: mysql
+                container_name: mysql
+                environment:
+                        - MYSQL_DATABASE=opal
+                        - MYSQL_ROOT_PASSWORD=password
+                        - MYSQL_USER=opal
+                        - MYSQL_PASSWORD=password
+        mariadbdata:
+                image: mariadb
+                container_name: mariadb
+                environment:
+                        - MYSQL_DATABASE=opal
+                        - MYSQL_ROOT_PASSWORD=password
+                        - MYSQL_USER=opal
+                        - MYSQL_PASSWORD=password
+        postgresdata:
+                image: postgres
+                container_name: postgres
+                environment:
+                        - POSTGRES_DB=opal
+                        - POSTGRES_USER=opal
+                        - POSTGRES_PASSWORD=password
+        rock:
+                image: datashield/rock-base:latest
+                container_name: rock
