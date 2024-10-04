@@ -34,7 +34,7 @@ services:
                         - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
 
         opal:
-                image: obiba/opal:5.0.0-RC4
+                image: obiba/opal:5.0.0-RC5
                 container_name: opal
                 expose:
                         - 8080
